@@ -244,9 +244,6 @@ elif st.session_state.user_data["logged_in"]:
         if st.button("Generate Plan/Recipe"):
             with st.spinner("Processing your request..."):
                 try:
-                    # Check if asking for a recipe specifically
-                    is_recipe_request = any(word in diet_preferences.lower() for word in ["recipe", "how to make", "how to cook", "ingredients for"])
-                    
                     # Auto-extract number of days from user input
                     word_to_num = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10, "single": 1, "a": 1}
                     day_match = re.search(r"(\d+)\s*days?", diet_preferences, re.IGNORECASE)
@@ -267,21 +264,8 @@ elif st.session_state.user_data["logged_in"]:
                         "Always provide accurate calorie counts and macronutrient breakdowns."
                     )
 
-                    if is_recipe_request and plan_days is None:
-                        # Recipe Mode
-                        prompt = (
-                            f"The user wants a detailed recipe and cooking instructions for: {diet_preferences}. "
-                            f"User Profile: Goal: {st.session_state.user_data['goal']}, TDEE: {st.session_state.user_data['tdee']:.0f} kcal. "
-                            f"Provide:\n"
-                            f"1. A healthy version of the recipe tailored to their goal.\n"
-                            f"2. List of ingredients with precise measurements.\n"
-                            f"3. Step-by-step cooking instructions.\n"
-                            f"4. Total nutritional information (Calories, Protein, Carbs, Fats).\n"
-                            f"5. Why this is good for their goal: {st.session_state.user_data['goal']}."
-                        )
-                        display_title = "Your Personalized Recipe:"
-                    else:
-                        # Meal Plan Mode
+                    if plan_days is not None:
+                        # Meal Plan Mode — user explicitly asked for a duration
                         plan_days = plan_days if plan_days else 7
                         plan_days = max(1, min(plan_days, 30))
                         day_label = f"{plan_days}-day" if plan_days > 1 else "single-day"
@@ -295,6 +279,19 @@ elif st.session_state.user_data["logged_in"]:
                             f"End with a grocery list."
                         )
                         display_title = f"Your {day_label.title()} Personalized Meal Plan:"
+                    else:
+                        # Recipe Mode — no duration mentioned, give a recipe
+                        prompt = (
+                            f"The user asked about: {diet_preferences}. "
+                            f"Provide a detailed, healthy recipe with:\n"
+                            f"1. A brief description of the dish.\n"
+                            f"2. List of ingredients with precise measurements.\n"
+                            f"3. Step-by-step cooking instructions.\n"
+                            f"4. Total nutritional information (Calories, Protein, Carbs, Fats per serving).\n"
+                            f"5. Health tips tailored to their goal: {st.session_state.user_data['goal']} "
+                            f"(Daily needs: {st.session_state.user_data['tdee']:.0f} kcal)."
+                        )
+                        display_title = "🍳 Your Personalized Recipe:"
 
                     meal_plan_text = get_text_response(prompt, system_prompt)
                     st.subheader(display_title)
