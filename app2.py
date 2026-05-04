@@ -239,48 +239,65 @@ elif st.session_state.user_data["logged_in"]:
 
     # --- Meal Plan Tab ---
     with plan_tab:
-        st.subheader("🍽️ Generate a Personalized Meal Plan")
-        diet_preferences = st.text_input(f"Hello {st.session_state.user_data['name']}, enter your food preferences (e.g., '3 day south indian vegetarian plan')...")
-        if st.button("Generate Meal Plan"):
-            with st.spinner("Creating your personalized meal plan..."):
+        st.subheader("🍽️ Generate a Personalized Meal Plan or Recipe")
+        diet_preferences = st.text_input(f"Hello {st.session_state.user_data['name']}, enter your food preferences (e.g., '3 day vegan plan' or 'recipe for chicken curry')...")
+        if st.button("Generate Plan/Recipe"):
+            with st.spinner("Processing your request..."):
                 try:
+                    # Check if asking for a recipe specifically
+                    is_recipe_request = any(word in diet_preferences.lower() for word in ["recipe", "how to make", "how to cook", "ingredients for"])
+                    
                     # Auto-extract number of days from user input
                     word_to_num = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10, "single": 1, "a": 1}
                     day_match = re.search(r"(\d+)\s*days?", diet_preferences, re.IGNORECASE)
                     week_match = re.search(r"(\d+)\s*weeks?", diet_preferences, re.IGNORECASE)
                     word_match = re.search(r"\b(one|two|three|four|five|six|seven|eight|nine|ten|single|a)\s*days?\b", diet_preferences, re.IGNORECASE)
+                    
+                    plan_days = None
                     if day_match:
                         plan_days = int(day_match.group(1))
                     elif week_match:
                         plan_days = int(week_match.group(1)) * 7
                     elif word_match:
                         plan_days = word_to_num.get(word_match.group(1).lower(), 7)
-                    else:
-                        plan_days = 7  # default
-
-                    plan_days = max(1, min(plan_days, 30))  # clamp between 1-30
 
                     system_prompt = (
-                        "You are NutriAi, a certified nutritionist AI. You ONLY provide advice about nutrition, food, diet, and meal planning. "
-                        "If the user asks about anything unrelated to nutrition or food, politely decline and redirect them to nutrition topics. "
-                        "Always provide accurate calorie counts, macronutrient breakdowns, and portion sizes. "
-                        "Tailor your response to the exact number of days requested — never generate more or fewer days than asked."
+                        "You are NutriAi, a certified nutritionist and culinary expert. You ONLY provide advice about nutrition, food, diet, and recipes. "
+                        "If the user asks about anything unrelated to nutrition or food, politely decline. "
+                        "Always provide accurate calorie counts and macronutrient breakdowns."
                     )
-                    day_label = f"{plan_days}-day" if plan_days > 1 else "single-day"
-                    meal_plan_prompt = (
-                        f"Generate a detailed {day_label} personalized meal plan (exactly {plan_days} day{'s' if plan_days > 1 else ''}, no more, no less) "
-                        f"for a person with:\n"
-                        f"- Health Goal: {st.session_state.user_data['goal']}\n"
-                        f"- Daily Calorie Needs: {st.session_state.user_data['tdee']:.0f} kcal\n"
-                        f"- Food Preferences: {diet_preferences}\n\n"
-                        f"For each day, include Breakfast, Mid-Morning Snack, Lunch, Evening Snack, and Dinner with:\n"
-                        f"- Exact portion sizes\n"
-                        f"- Calorie count per meal\n"
-                        f"- Macronutrient breakdown (protein, carbs, fat)\n\n"
-                        f"End with a consolidated grocery list."
-                    )
-                    meal_plan_text = get_text_response(meal_plan_prompt, system_prompt)
-                    st.subheader(f"Your {day_label.title()} Personalized Meal Plan:")
+
+                    if is_recipe_request and plan_days is None:
+                        # Recipe Mode
+                        prompt = (
+                            f"The user wants a detailed recipe and cooking instructions for: {diet_preferences}. "
+                            f"User Profile: Goal: {st.session_state.user_data['goal']}, TDEE: {st.session_state.user_data['tdee']:.0f} kcal. "
+                            f"Provide:\n"
+                            f"1. A healthy version of the recipe tailored to their goal.\n"
+                            f"2. List of ingredients with precise measurements.\n"
+                            f"3. Step-by-step cooking instructions.\n"
+                            f"4. Total nutritional information (Calories, Protein, Carbs, Fats).\n"
+                            f"5. Why this is good for their goal: {st.session_state.user_data['goal']}."
+                        )
+                        display_title = "Your Personalized Recipe:"
+                    else:
+                        # Meal Plan Mode
+                        plan_days = plan_days if plan_days else 7
+                        plan_days = max(1, min(plan_days, 30))
+                        day_label = f"{plan_days}-day" if plan_days > 1 else "single-day"
+                        prompt = (
+                            f"Generate a detailed {day_label} personalized meal plan (exactly {plan_days} day{'s' if plan_days > 1 else ''}) "
+                            f"for a person with:\n"
+                            f"- Health Goal: {st.session_state.user_data['goal']}\n"
+                            f"- Daily Calorie Needs: {st.session_state.user_data['tdee']:.0f} kcal\n"
+                            f"- Food Preferences: {diet_preferences}\n\n"
+                            f"For each day, include Breakfast, Mid-Morning Snack, Lunch, Evening Snack, and Dinner with portion sizes, calories, and macros. "
+                            f"End with a grocery list."
+                        )
+                        display_title = f"Your {day_label.title()} Personalized Meal Plan:"
+
+                    meal_plan_text = get_text_response(prompt, system_prompt)
+                    st.subheader(display_title)
                     st.write(meal_plan_text)
                     conn = get_db_connection()
                     if conn:
@@ -291,7 +308,7 @@ elif st.session_state.user_data["logged_in"]:
                             )
                         conn.commit()
                         conn.close()
-                    st.download_button(label="Download Meal Plan 📄", data=meal_plan_text, file_name="personalized_meal_plan.txt", mime="text/plain")
+                    st.download_button(label="Download Result 📄", data=meal_plan_text, file_name="nutriai_plan_recipe.txt", mime="text/plain")
                 except Exception as e:
                     st.error(f"An error occurred while generating the meal plan: {e}")
         if st.button("View Last Generated Meal Plan"):
